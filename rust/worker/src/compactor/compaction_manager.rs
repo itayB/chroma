@@ -13,7 +13,6 @@ use crate::execution::orchestration::CompactionResponse;
 use crate::index::hnsw_provider::HnswIndexProvider;
 use crate::log::log::Log;
 use crate::memberlist::Memberlist;
-use crate::segment::record_segment::RecordSegmentReader;
 use crate::storage::Storage;
 use crate::sysdb;
 use crate::sysdb::sysdb::SysDb;
@@ -47,6 +46,7 @@ pub(crate) struct CompactionManager {
     // Config
     compaction_manager_queue_size: usize,
     compaction_interval: Duration,
+    min_compaction_size: usize,
 }
 
 #[derive(Error, Debug)]
@@ -73,6 +73,7 @@ impl CompactionManager {
         hnsw_index_provider: HnswIndexProvider,
         compaction_manager_queue_size: usize,
         compaction_interval: Duration,
+        min_compaction_size: usize,
     ) -> Self {
         CompactionManager {
             system: None,
@@ -85,6 +86,7 @@ impl CompactionManager {
             dispatcher: None,
             compaction_manager_queue_size,
             compaction_interval,
+            min_compaction_size,
         }
     }
 
@@ -200,6 +202,7 @@ impl Configurable<CompactionServiceConfig> for CompactionManager {
         let compaction_interval_sec = config.compactor.compaction_interval_sec;
         let max_concurrent_jobs = config.compactor.max_concurrent_jobs;
         let compaction_manager_queue_size = config.compactor.compaction_manager_queue_size;
+        let min_compaction_size = config.compactor.min_compaction_size;
 
         let assignment_policy_config = &config.assignment_policy;
         let assignment_policy = match crate::assignment::from_config(assignment_policy_config).await
@@ -231,6 +234,7 @@ impl Configurable<CompactionServiceConfig> for CompactionManager {
             HnswIndexProvider::new(storage.clone(), path),
             compaction_manager_queue_size,
             Duration::from_secs(compaction_interval_sec),
+            min_compaction_size,
         ))
     }
 }
@@ -456,6 +460,7 @@ mod tests {
         let compaction_manager_queue_size = 1000;
         let max_concurrent_jobs = 10;
         let compaction_interval = Duration::from_secs(1);
+        let min_compaction_size = 0;
 
         // Set assignment policy
         let mut assignment_policy = Box::new(RendezvousHashingAssignmentPolicy::new());
@@ -481,6 +486,7 @@ mod tests {
             HnswIndexProvider::new(storage, PathBuf::from(tmpdir.path().to_str().unwrap())),
             compaction_manager_queue_size,
             compaction_interval,
+            min_compaction_size,
         );
 
         let system = System::new();
