@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING, Optional, Tuple, Any, Union, cast
+from typing import TYPE_CHECKING, Optional, Tuple, Any, Union
 import numpy as np
 from uuid import UUID
+from chromadb.api.configuration import CollectionConfiguration
 import chromadb.utils.embedding_functions as ef
 from chromadb.api.types import (
     URI,
@@ -87,26 +88,29 @@ class Collection:
         return f"Collection(name={self.name})"
 
     # Expose the model properties as read-only properties on the Collection class
-
     @property
     def id(self) -> UUID:
-        return self._model["id"]
+        return self._model.id
 
     @property
     def name(self) -> str:
-        return self._model["name"]
+        return self._model.name
 
     @property
-    def metadata(self) -> CollectionMetadata:
-        return cast(CollectionMetadata, self._model["metadata"])
+    def metadata(self) -> Optional[CollectionMetadata]:
+        return self._model.metadata  # type: ignore[return-value]
+
+    @property
+    def configuration(self) -> Optional[CollectionConfiguration]:
+        return self._model.get_configuration()
 
     @property
     def tenant(self) -> str:
-        return self._model["tenant"]
+        return self._model.tenant
 
     @property
     def database(self) -> str:
-        return self._model["database"]
+        return self._model.database
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Collection):
@@ -143,7 +147,7 @@ class Collection:
     def add(
         self,
         ids: OneOrMany[ID],
-        embeddings: Optional[
+        embeddings: Optional[  # type: ignore[type-arg]
             Union[
                 OneOrMany[Embedding],
                 OneOrMany[np.ndarray],
@@ -284,7 +288,7 @@ class Collection:
 
     def query(
         self,
-        query_embeddings: Optional[
+        query_embeddings: Optional[  # type: ignore[type-arg]
             Union[
                 OneOrMany[Embedding],
                 OneOrMany[np.ndarray],
@@ -338,7 +342,7 @@ class Collection:
         valid_query_embeddings = (
             validate_embeddings(
                 self._normalize_embeddings(
-                    maybe_cast_one_to_many_embedding(query_embeddings)
+                    maybe_cast_one_to_many_embedding(query_embeddings)  # type: ignore[arg-type]
                 )
             )
             if query_embeddings is not None
@@ -428,15 +432,12 @@ class Collection:
         # but another thread sees the cached local metadata.
         # TODO: fixme
         self._client._modify(id=self.id, new_name=name, new_metadata=metadata)
-        if name:
-            self._model["name"] = name
-        if metadata:
-            self._model["metadata"] = metadata
+        self._model.modify(name=name, metadata=metadata)
 
     def update(
         self,
         ids: OneOrMany[ID],
-        embeddings: Optional[
+        embeddings: Optional[  # type: ignore[type-arg]
             Union[
                 OneOrMany[Embedding],
                 OneOrMany[np.ndarray],
@@ -487,7 +488,7 @@ class Collection:
     def upsert(
         self,
         ids: OneOrMany[ID],
-        embeddings: Optional[
+        embeddings: Optional[  # type: ignore[type-arg]
             Union[
                 OneOrMany[Embedding],
                 OneOrMany[np.ndarray],
@@ -566,7 +567,7 @@ class Collection:
     def _validate_embedding_set(
         self,
         ids: OneOrMany[ID],
-        embeddings: Optional[
+        embeddings: Optional[  # type: ignore[type-arg]
             Union[
                 OneOrMany[Embedding],
                 OneOrMany[np.ndarray],
@@ -588,7 +589,7 @@ class Collection:
         valid_ids = validate_ids(maybe_cast_one_to_many_ids(ids))
         valid_embeddings = (
             validate_embeddings(
-                self._normalize_embeddings(maybe_cast_one_to_many_embedding(embeddings))
+                self._normalize_embeddings(maybe_cast_one_to_many_embedding(embeddings))  # type: ignore[arg-type]
             )
             if embeddings is not None
             else None
@@ -658,14 +659,14 @@ class Collection:
 
     @staticmethod
     def _normalize_embeddings(
-        embeddings: Union[
+        embeddings: Union[  # type: ignore[type-arg]
             OneOrMany[Embedding],
             OneOrMany[np.ndarray],
         ]
     ) -> Embeddings:
         if isinstance(embeddings, np.ndarray):
-            return embeddings.tolist()
-        return embeddings
+            return embeddings.tolist()  # type: ignore[no-any-return]
+        return embeddings  # type: ignore[return-value]
 
     def _embed(self, input: Any) -> Embeddings:
         if self._embedding_function is None:

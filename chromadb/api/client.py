@@ -5,6 +5,7 @@ import uuid
 from overrides import override
 import requests
 from chromadb.api import AdminAPI, ClientAPI, ServerAPI
+from chromadb.api.configuration import CollectionConfiguration
 from chromadb.api.types import (
     CollectionMetadata,
     DataLoader,
@@ -191,6 +192,7 @@ class Client(SharedSystemClient, ClientAPI):
     def create_collection(
         self,
         name: str,
+        configuration: Optional[CollectionConfiguration] = None,
         metadata: Optional[CollectionMetadata] = None,
         embedding_function: Optional[
             EmbeddingFunction[Embeddable]
@@ -204,6 +206,7 @@ class Client(SharedSystemClient, ClientAPI):
             tenant=self.tenant,
             database=self.database,
             get_or_create=get_or_create,
+            configuration=configuration,
         )
         return Collection(
             client=self._server,
@@ -239,6 +242,7 @@ class Client(SharedSystemClient, ClientAPI):
     def get_or_create_collection(
         self,
         name: str,
+        configuration: Optional[CollectionConfiguration] = None,
         metadata: Optional[CollectionMetadata] = None,
         embedding_function: Optional[
             EmbeddingFunction[Embeddable]
@@ -250,6 +254,7 @@ class Client(SharedSystemClient, ClientAPI):
             metadata=metadata,
             tenant=self.tenant,
             database=self.database,
+            configuration=configuration,
         )
         return Collection(
             client=self._server,

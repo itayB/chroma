@@ -4,6 +4,7 @@ from overrides import override
 from pypika import Table, Column
 from itertools import groupby
 
+from chromadb.api.configuration import CollectionConfiguration
 from chromadb.config import DEFAULT_DATABASE, DEFAULT_TENANT, System
 from chromadb.db.base import (
     Cursor,
@@ -185,6 +186,7 @@ class SqlSysDB(SqlDB, SysDB):
         self,
         id: UUID,
         name: str,
+        configuration: CollectionConfiguration,
         metadata: Optional[Metadata] = None,
         dimension: Optional[int] = None,
         get_or_create: bool = False,
@@ -204,6 +206,7 @@ class SqlSysDB(SqlDB, SysDB):
         existing = self.get_collections(name=name, tenant=tenant, database=database)
         if existing:
             if get_or_create:
+                # We ignore configuration on the get path - configuration is immutable
                 collection = existing[0]
                 if metadata is not None and collection["metadata"] != metadata:
                     self.update_collection(
@@ -222,6 +225,7 @@ class SqlSysDB(SqlDB, SysDB):
         collection = Collection(
             id=id,
             name=name,
+            configuration=configuration,
             metadata=metadata,
             dimension=dimension,
             tenant=tenant,
@@ -270,6 +274,7 @@ class SqlSysDB(SqlDB, SysDB):
                     collection["id"],
                     collection["metadata"],
                 )
+            self._insert_collection_config(cur, collection["id"], configuration)
         return collection, True
 
     @trace_method("SqlSysDB.get_segments", OpenTelemetryGranularity.ALL)
@@ -370,6 +375,7 @@ class SqlSysDB(SqlDB, SysDB):
 
         collections_t = Table("collections")
         metadata_t = Table("collection_metadata")
+        collection_config_t = Table("collection_config")
         databases_t = Table("databases")
         q = (
             self.querybuilder()
@@ -378,6 +384,7 @@ class SqlSysDB(SqlDB, SysDB):
                 collections_t.id,
                 collections_t.name,
                 collections_t.dimension,
+                collection_config_t.config_json_str,
                 databases_t.name,
                 databases_t.tenant_id,
                 metadata_t.key,
@@ -385,6 +392,8 @@ class SqlSysDB(SqlDB, SysDB):
                 metadata_t.int_value,
                 metadata_t.float_value,
             )
+            .left_join(collection_config_t)
+            .on(collections_t.id == collection_config_t.collection_id)
             .left_join(metadata_t)
             .on(collections_t.id == metadata_t.collection_id)
             .left_join(databases_t)
@@ -420,15 +429,17 @@ class SqlSysDB(SqlDB, SysDB):
                 rows = list(collection_rows)
                 name = str(rows[0][1])
                 dimension = int(rows[0][2]) if rows[0][2] else None
+                configuration = CollectionConfiguration.from_json_str(rows[0][3])
                 metadata = self._metadata_from_rows(rows)
                 collections.append(
                     Collection(
                         id=cast(UUID, id),
                         name=name,
+                        configuration=configuration,
                         metadata=metadata,
                         dimension=dimension,
-                        tenant=str(rows[0][4]),
-                        database=str(rows[0][3]),
+                        tenant=str(rows[0][5]),
+                        database=str(rows[0][4]),
                         version=0,
                     )
                 )
@@ -716,6 +727,27 @@ class SqlSysDB(SqlDB, SysDB):
             elif v is None:
                 continue
 
+        sql, params = get_sql(q, self.parameter_format())
+        if sql:
+            cur.execute(sql, params)
+
+    @trace_method("SqlSysDB._insert_collection_config", OpenTelemetryGranularity.ALL)
+    def _insert_collection_config(
+        self,
+        cur: Cursor,
+        id: UUID,
+        collection_config: CollectionConfiguration,
+    ) -> None:
+        table = Table("collection_config")
+        q = (
+            self.querybuilder()
+            .into(table)
+            .columns(table.collection_id, table.config_json_str)
+        )
+        sql_id = self.uuid_to_db(id)
+        q = q.insert(
+            ParameterValue(sql_id), ParameterValue(collection_config.to_json_str())
+        )
         sql, params = get_sql(q, self.parameter_format())
         if sql:
             cur.execute(sql, params)

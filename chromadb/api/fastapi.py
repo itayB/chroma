@@ -6,21 +6,17 @@ from uuid import UUID
 import requests
 from overrides import override
 
+from chromadb.api.configuration import CollectionConfiguration
 import chromadb.errors as errors
 from chromadb.types import Database, Tenant
-import chromadb.utils.embedding_functions as ef
 from chromadb.api import ServerAPI
 
 # from chromadb.api.models.Collection import Collection
 from chromadb.api.types import (
-    DataLoader,
     Documents,
-    Embeddable,
     Embeddings,
-    EmbeddingFunction,
     IDs,
     Include,
-    Loadable,
     Metadatas,
     URIs,
     Where,
@@ -209,15 +205,7 @@ class FastAPI(ServerAPI):
         raise_chroma_error(resp)
         json_collection_models = json.loads(resp.text)
         collection_models = [
-            CollectionModel(
-                id=json_collection["id"],
-                name=json_collection["name"],
-                metadata=json_collection["metadata"],
-                dimension=json_collection["dimension"],
-                tenant=json_collection["tenant"],
-                database=json_collection["database"],
-                version=json_collection["version"],
-            )
+            CollectionModel.from_json(json_collection)
             for json_collection in json_collection_models
         ]
 
@@ -241,6 +229,7 @@ class FastAPI(ServerAPI):
     def create_collection(
         self,
         name: str,
+        configuration: Optional[CollectionConfiguration] = None,
         metadata: Optional[CollectionMetadata] = None,
         get_or_create: bool = False,
         tenant: str = DEFAULT_TENANT,
@@ -253,6 +242,7 @@ class FastAPI(ServerAPI):
                 {
                     "name": name,
                     "metadata": metadata,
+                    "configuration": configuration.to_json() if configuration else None,
                     "get_or_create": get_or_create,
                 }
             ),
@@ -260,15 +250,7 @@ class FastAPI(ServerAPI):
         )
         raise_chroma_error(resp)
         resp_json = json.loads(resp.text)
-        model = CollectionModel(
-            id=resp_json["id"],
-            name=resp_json["name"],
-            metadata=resp_json["metadata"],
-            dimension=resp_json["dimension"],
-            tenant=resp_json["tenant"],
-            database=resp_json["database"],
-            version=resp_json["version"],
-        )
+        model = CollectionModel.from_json(resp_json)
         return model
 
     @trace_method("FastAPI.get_collection", OpenTelemetryGranularity.OPERATION)
@@ -277,10 +259,6 @@ class FastAPI(ServerAPI):
         self,
         name: str,
         id: Optional[UUID] = None,
-        embedding_function: Optional[
-            EmbeddingFunction[Embeddable]
-        ] = ef.DefaultEmbeddingFunction(),  # type: ignore
-        data_loader: Optional[DataLoader[Loadable]] = None,
         tenant: str = DEFAULT_TENANT,
         database: str = DEFAULT_DATABASE,
     ) -> CollectionModel:
@@ -296,15 +274,7 @@ class FastAPI(ServerAPI):
         )
         raise_chroma_error(resp)
         resp_json = json.loads(resp.text)
-        model = CollectionModel(
-            id=resp_json["id"],
-            name=resp_json["name"],
-            metadata=resp_json["metadata"],
-            dimension=resp_json["dimension"],
-            tenant=resp_json["tenant"],
-            database=resp_json["database"],
-            version=resp_json["version"],
-        )
+        model = CollectionModel.from_json(resp_json)
         return model
 
     @trace_method(
@@ -314,6 +284,7 @@ class FastAPI(ServerAPI):
     def get_or_create_collection(
         self,
         name: str,
+        configuration: Optional[CollectionConfiguration] = None,
         metadata: Optional[CollectionMetadata] = None,
         tenant: str = DEFAULT_TENANT,
         database: str = DEFAULT_DATABASE,
@@ -323,6 +294,7 @@ class FastAPI(ServerAPI):
             self.create_collection(
                 name=name,
                 metadata=metadata,
+                configuration=configuration,
                 get_or_create=True,
                 tenant=tenant,
                 database=database,
